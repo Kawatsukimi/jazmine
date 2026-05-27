@@ -18,6 +18,8 @@ local holdStartTime = 0
 local lastFTime = 0
 local currentTarget = nil
 
+local connections = {}
+
 -- ================== CHARACTER SETUP ==================
 local function setupCharacter(newChar)
     character = newChar
@@ -25,7 +27,7 @@ local function setupCharacter(newChar)
 end
 
 if player.Character then setupCharacter(player.Character) end
-player.CharacterAdded:Connect(setupCharacter)
+table.insert(connections, player.CharacterAdded:Connect(setupCharacter))
 
 -- ================== M1 DETECTION ==================
 local function isM1ing(targetChar)
@@ -38,37 +40,31 @@ local function isM1ing(targetChar)
     return false
 end
 
--- ================== FACE TARGET (TRUE HORIZONTAL ONLY) ==================
+-- ================== FACE TARGET (Horizontal Only) ==================
 local function faceTarget(targetRoot)
     if not targetRoot or not root then return end
     
     local myPos = root.Position
     local targetPos = targetRoot.Position
 
-    -- Character faces target horizontally only
     local flatDir = Vector3.new(targetPos.X - myPos.X, 0, targetPos.Z - myPos.Z)
     if flatDir.Magnitude < 0.1 then return end
     flatDir = flatDir.Unit
 
     root.CFrame = CFrame.lookAt(myPos, myPos + flatDir)
 
-    -- === CAMERA: Horizontal Only (Keeps your exact up/down angle & FOV) ===
+    -- Camera Horizontal Only
     local camCFrame = camera.CFrame
     local camPos = camCFrame.Position
-    
-    -- Get current vertical angle (pitch)
     local currentLook = camCFrame.LookVector
     local currentPitch = math.asin(currentLook.Y)
-    
-    -- Desired horizontal direction to target
+
     local targetLookPos = targetPos + Vector3.new(0, 2.8, 0)
     local desiredHorizontal = Vector3.new(targetLookPos.X - camPos.X, 0, targetLookPos.Z - camPos.Z)
     if desiredHorizontal.Magnitude < 0.1 then return end
     desiredHorizontal = desiredHorizontal.Unit
-    
-    -- Rebuild look vector with original pitch
+
     local newLookVector = desiredHorizontal * math.cos(currentPitch) + Vector3.new(0, math.sin(currentPitch), 0)
-    
     camera.CFrame = CFrame.lookAt(camPos, camPos + newLookVector)
 end
 
@@ -94,7 +90,7 @@ local function doLeftClick()
 end
 
 -- ================== MAIN LOOP ==================
-RunService.RenderStepped:Connect(function()
+local renderConnection = RunService.RenderStepped:Connect(function()
     if not root or not root.Parent then return end
 
     local currentTime = tick()
@@ -113,7 +109,6 @@ RunService.RenderStepped:Connect(function()
         if model:IsA("Model") and model ~= character then
             local hum = model:FindFirstChild("Humanoid")
             local tRoot = model:FindFirstChild("HumanoidRootPart")
-            
             if hum and tRoot and hum.Health > 0 then
                 local dist = (myPos - tRoot.Position).Magnitude
                 if dist <= RADIUS and isM1ing(model) and dist < closestDist then
@@ -133,13 +128,11 @@ RunService.RenderStepped:Connect(function()
 
     if currentTarget then
         faceTarget(currentTarget)
-
         local elapsed = currentTime - holdStartTime
 
         if elapsed >= HOLD_TIME then
             releaseF()
             doLeftClick()
-            
             lastFTime = currentTime
             currentTarget = nil
         else
@@ -148,10 +141,26 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ================== Toggle ==================
-UserInputService.InputBegan:Connect(function(input)
+table.insert(connections, renderConnection)
+
+-- ================== RIGHT CTRL TOGGLE ==================
+local toggleConnection = UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.RightControl then
         releaseF()
-        print("Anti-M1 Script Disabled")
+        print("Anti-M1 Script Disabled (Manual)")
     end
 end)
+table.insert(connections, toggleConnection)
+
+-- ================== UNLOAD FUNCTION ==================
+local function Unload()
+    for _, conn in ipairs(connections) do
+        if conn and conn.Disconnect then
+            conn:Disconnect()
+        end
+    end
+    releaseF()
+    print("AutoBlock Fully Unloaded")
+end
+
+return { Unload = Unload }
