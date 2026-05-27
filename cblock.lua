@@ -17,7 +17,7 @@ local isHoldingF = false
 local holdStartTime = 0
 local lastFTime = 0
 local currentTarget = nil
-local autoblockEnabled = true   -- Controlled by launcher
+local autoblockEnabled = true
 
 -- Character Setup
 local function setupCharacter(newChar)
@@ -25,18 +25,14 @@ local function setupCharacter(newChar)
     root = newChar:WaitForChild("HumanoidRootPart")
 end
 
-if player.Character then
-    setupCharacter(player.Character)
-end
+if player.Character then setupCharacter(player.Character) end
 player.CharacterAdded:Connect(setupCharacter)
 
 -- M1 Detection
 local function isM1ing(targetChar)
     if not targetChar then return false end
     for _, v in ipairs(targetChar:GetDescendants()) do
-        if v.Name == "M1ing" and v:IsA("Accessory") then
-            return true
-        end
+        if v.Name == "M1ing" and v:IsA("Accessory") then return true end
     end
     return false
 end
@@ -44,7 +40,6 @@ end
 -- Face Target
 local function faceTarget(targetRoot)
     if not targetRoot or not root then return end
-  
     local myPos = root.Position
     local targetPos = targetRoot.Position
    
@@ -67,7 +62,6 @@ local function faceTarget(targetRoot)
     camera.CFrame = CFrame.lookAt(camPos, camPos + newLookVector)
 end
 
--- Input Functions
 local function holdF()
     if not isHoldingF then
         isHoldingF = true
@@ -88,8 +82,8 @@ local function doLeftClick()
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 end
 
--- Main Loop
-RunService.RenderStepped:Connect(function()
+-- ================== MAIN CONNECTION ==================
+local connection = RunService.RenderStepped:Connect(function()
     if not autoblockEnabled then
         releaseF()
         currentTarget = nil
@@ -116,7 +110,6 @@ RunService.RenderStepped:Connect(function()
         if model:IsA("Model") and model ~= character then
             local hum = model:FindFirstChild("Humanoid")
             local tRoot = model:FindFirstChild("HumanoidRootPart")
-          
             if hum and tRoot and hum.Health > 0 then
                 local dist = (myPos - tRoot.Position).Magnitude
                 if dist <= RADIUS and isM1ing(model) and dist < closestDist then
@@ -137,7 +130,6 @@ RunService.RenderStepped:Connect(function()
     if currentTarget then
         faceTarget(currentTarget)
         local elapsed = currentTime - holdStartTime
-       
         if elapsed >= HOLD_TIME then
             releaseF()
             doLeftClick()
@@ -158,4 +150,4 @@ UserInputService.InputBegan:Connect(function(input)
     end
 end)
 
-print("Autoblock loaded successfully (No GUI)")
+print("✅ Autoblock loaded successfully (No GUI)")
