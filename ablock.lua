@@ -1,4 +1,3 @@
--- ablock.lua
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -6,21 +5,18 @@ local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
 local camera = Workspace.CurrentCamera
 
 local RADIUS = 11
 local HOLD_TIME = 0.25
 local COOLDOWN = 0.65
 
-local connections = {}
-local scriptEnabled = true
-
 local isHoldingF = false
 local holdStartTime = 0
 local lastFTime = 0
 local currentTarget = nil
-local character = player.Character or player.CharacterAdded:Wait()
-local root = character:WaitForChild("HumanoidRootPart")
 
 -- ================== CHARACTER SETUP ==================
 local function setupCharacter(newChar)
@@ -28,7 +24,8 @@ local function setupCharacter(newChar)
     root = newChar:WaitForChild("HumanoidRootPart")
 end
 
-table.insert(connections, player.CharacterAdded:Connect(setupCharacter))
+if player.Character then setupCharacter(player.Character) end
+player.CharacterAdded:Connect(setupCharacter)
 
 -- ================== M1 DETECTION ==================
 local function isM1ing(targetChar)
@@ -41,30 +38,46 @@ local function isM1ing(targetChar)
     return false
 end
 
--- ================== FACE TARGET ==================
+-- ================== FACE TARGET (TRUE HORIZONTAL ONLY) ==================
 local function faceTarget(targetRoot)
     if not targetRoot or not root then return end
     
     local myPos = root.Position
     local targetPos = targetRoot.Position
 
+    -- Character faces target horizontally only
     local flatDir = Vector3.new(targetPos.X - myPos.X, 0, targetPos.Z - myPos.Z)
     if flatDir.Magnitude < 0.1 then return end
     flatDir = flatDir.Unit
 
     root.CFrame = CFrame.lookAt(myPos, myPos + flatDir)
 
+
+    -- prevent double-run when loaded repeatedly
+    if _G.__TSB_AUTOBLOCK_RUNNING then
+        return function() end
+    end
+    _G.__TSB_AUTOBLOCK_RUNNING = true
+
+    local __tsb_conn = nil
+    local __tsb_inputConn = nil
     local camCFrame = camera.CFrame
+    __tsb_conn = RunService.RenderStepped:Connect(function()
     local camPos = camCFrame.Position
+    
+    -- Get current vertical angle (pitch)
     local currentLook = camCFrame.LookVector
     local currentPitch = math.asin(currentLook.Y)
-
+    
+    -- Desired horizontal direction to target
     local targetLookPos = targetPos + Vector3.new(0, 2.8, 0)
     local desiredHorizontal = Vector3.new(targetLookPos.X - camPos.X, 0, targetLookPos.Z - camPos.Z)
     if desiredHorizontal.Magnitude < 0.1 then return end
     desiredHorizontal = desiredHorizontal.Unit
-
+    
+    -- Rebuild look vector with original pitch
     local newLookVector = desiredHorizontal * math.cos(currentPitch) + Vector3.new(0, math.sin(currentPitch), 0)
+    
     camera.CFrame = CFrame.lookAt(camPos, camPos + newLookVector)
 end
 
@@ -90,72 +103,77 @@ local function doLeftClick()
 end
 
 -- ================== MAIN LOOP ==================
-local function mainLoop()
-    while scriptEnabled and root and root.Parent do
-        local currentTime = tick()
+RunService.RenderStepped:Connect(function()
+    if not root or not root.Parent then return end
 
-        if currentTime - lastFTime < COOLDOWN then
+    local currentTime = tick()
+
+    if currentTime - lastFTime < COOLDOWN then
+        releaseF()
+        currentTarget = nil
+        return
+    end
+
+    local myPos = root.Position
+    local bestTarget = nil
+
+    for _, model in ipairs(Workspace.Live:GetChildren()) do
+        if model:IsA("Model") and model ~= character then
+            local hum = model:FindFirstChild("Humanoid")
+            local tRoot = model:FindFirstChild("HumanoidRootPart")
+            
+    __tsb_inputConn = UserInputService.InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.RightControl then
             releaseF()
-            currentTarget = nil
-            RunService.RenderStepped:Wait()
-            continue
+            print("Anti-M1 Script Disabled")
         end
+    end)
 
-        local myPos = root.Position
-        local bestTarget = nil
-        local closestDist = math.huge
-
-        for _, model in ipairs(Workspace.Live:GetChildren()) do
-            if model:IsA("Model") and model ~= character then
-                local hum = model:FindFirstChild("Humanoid")
-                local tRoot = model:FindFirstChild("HumanoidRootPart")
-                if hum and tRoot and hum.Health > 0 then
-                    local dist = (myPos - tRoot.Position).Magnitude
-                    if dist <= RADIUS and isM1ing(model) and dist < closestDist then
-                        closestDist = dist
-                        bestTarget = tRoot
-                    end
+    -- Return a stop function so loaders can disconnect this script
+    return function()
+        if __tsb_conn then __tsb_conn:Disconnect(); __tsb_conn = nil end
+        if __tsb_inputConn then __tsb_inputConn:Disconnect(); __tsb_inputConn = nil end
+        _G.__TSB_AUTOBLOCK_RUNNING = false
+        releaseF()
+    end
+            if hum and tRoot and hum.Health > 0 then
+                local dist = (myPos - tRoot.Position).Magnitude
+                if dist <= RADIUS and isM1ing(model) and dist < closestDist then
+                    closestDist = dist
+                    bestTarget = tRoot
                 end
             end
         end
+    end
 
-        if bestTarget and currentTarget == nil then
-            currentTarget = bestTarget
-            holdStartTime = currentTime
-            faceTarget(bestTarget)
+    if bestTarget and currentTarget == nil then
+        currentTarget = bestTarget
+        holdStartTime = currentTime
+        faceTarget(bestTarget)
+        holdF()
+    end
+
+    if currentTarget then
+        faceTarget(currentTarget)
+
+        local elapsed = currentTime - holdStartTime
+
+        if elapsed >= HOLD_TIME then
+            releaseF()
+            doLeftClick()
+            
+            lastFTime = currentTime
+            currentTarget = nil
+        else
             holdF()
         end
-
-        if currentTarget then
-            faceTarget(currentTarget)
-            local elapsed = currentTime - holdStartTime
-
-            if elapsed >= HOLD_TIME then
-                releaseF()
-                doLeftClick()
-                lastFTime = currentTime
-                currentTarget = nil
-            else
-                holdF()
-            end
-        end
-
-        RunService.RenderStepped:Wait()
     end
-end
+end)
 
-table.insert(connections, task.spawn(mainLoop))
-
--- ================== UNLOAD ==================
-local function Unload()
-    scriptEnabled = false
-    for _, conn in ipairs(connections) do
-        if typeof(conn) == "RBXScriptConnection" and conn.Disconnect then
-            conn:Disconnect()
-        end
+-- ================== Toggle ==================
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        releaseF()
+        print("Anti-M1 Script Disabled")
     end
-    releaseF()
-    print("✅ AutoBlock Fully Unloaded")
-end
-
-return { Unload = Unload }
+end)
