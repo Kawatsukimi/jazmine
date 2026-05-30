@@ -4,63 +4,92 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
 
-local targetPosition = Vector3.new(-360.94, 490.02, -297.26)
+-- ====================== NOCLIP (Always On) ======================
+local Noclip = nil
+local Clip = false
+
+local function noclip()
+    if Noclip then return end
+    
+    local function Nocl()
+        if Clip == false and LocalPlayer.Character then
+            for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+                if v:IsA("BasePart") and v.CanCollide then
+                    v.CanCollide = false
+                end
+            end
+        end
+    end
+    
+    Noclip = RunService.Stepped:Connect(Nocl)
+end
+
+-- ====================== TARGET POSITION ======================
+local targetPosition = Vector3.new(163.49, 433.86, -512.23)
 
 local teleportConnection = nil
 local spamConnection = nil
 local claimFunction = nil
 
+-- ====================== EMOTE CLAIM LOGIC ======================
 local function tryClaimEmote()
     for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
         for _, obj in ipairs(gui:GetDescendants()) do
             if obj.Name == "Spin" and (obj:IsA("TextButton") or obj:IsA("ImageButton")) then
                 
-                if not claimFunction then
-                    pcall(function()
-                        local cons = getconnections(obj.MouseButton1Click)
-                        if #cons > 0 and cons[1].Function then
-                            claimFunction = cons[1].Function
-                        end
-                    end)
-                end
+                local text = ""
+                pcall(function()
+                    if obj:FindFirstChild("TextLabel") then
+                        text = obj.TextLabel.Text
+                    elseif obj.Text then
+                        text = obj.Text
+                    end
+                end)
                 
-                if claimFunction then
-                    pcall(function()
-                        claimFunction()
-                    end)
-                else
-                    pcall(function()
-                        firesignal(obj.MouseButton1Click)
-                    end)
+                local upper = text:upper()
+                if upper:find("CLAIM") or upper:find("CLICK ME") or upper:find("NEW EMOTE") then
+                    
+                    if not claimFunction then
+                        pcall(function()
+                            local cons = getconnections(obj.MouseButton1Click)
+                            if #cons > 0 and cons[1].Function then
+                                claimFunction = cons[1].Function
+                            end
+                        end)
+                    end
+                    
+                    if claimFunction then
+                        pcall(function() claimFunction() end)
+                    else
+                        pcall(function() firesignal(obj.MouseButton1Click) end)
+                    end
                 end
-                
-                return
             end
         end
     end
 end
 
+-- ====================== PRESS B FUNCTION ======================
+local function pressB()
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.B, false, game)
+    task.wait(0.05)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.B, false, game)
+end
+
+-- ====================== TELEPORT LOCK ======================
 local function startTeleportLock()
-    if teleportConnection then 
-        teleportConnection:Disconnect() 
-    end
-    
-    teleportConnection = task.spawn(function()
-        while true do
-            local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                root.CFrame = CFrame.new(targetPosition) * (root.CFrame.Rotation)
-            end
-            task.wait(0.25)  -- 0.25 seconds
+    if teleportConnection then teleportConnection:Disconnect() end
+    teleportConnection = RunService.Heartbeat:Connect(function()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.CFrame = CFrame.new(targetPosition) * (root.CFrame.Rotation)
         end
     end)
 end
 
+-- ====================== KEY SPAM ======================
 local function startKeySpam()
-    if spamConnection then 
-        spamConnection:Disconnect() 
-    end
-    
+    if spamConnection then spamConnection:Disconnect() end
     spamConnection = RunService.Heartbeat:Connect(function()
         local t = tick()
         if t % 1 < 0.1 then
@@ -74,13 +103,21 @@ local function startKeySpam()
     end)
 end
 
+-- ====================== START EVERYTHING ======================
 startTeleportLock()
 startKeySpam()
 
--- emote every 5 second claim
+-- Auto Claim Loop (every 5 seconds)
 task.spawn(function()
     while true do
-        task.wait(5)
-        pcall(tryClaimEmote)
+        task.wait(15)
+        
+        pcall(pressB)           -- Open emote wheel
+        task.wait(0.5)
+        pcall(tryClaimEmote)    -- Try to claim
+        task.wait(1.5)
+        pcall(pressB)           -- Close emote wheel
     end
 end)
+-- Enable Noclip
+noclip()
