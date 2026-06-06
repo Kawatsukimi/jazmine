@@ -10,8 +10,13 @@ local Camera = workspace.CurrentCamera
 local MAX_DISTANCE = 50
 local BEHIND_DISTANCE = 3
 local SPAM_DURATION = 0.185
-local TARGETING_FOV = 35        -- Lower = stricter, Higher = more forgiving (recommended 25-45)
+local TARGETING_FOV = 100       -- Lower = stricter, Higher = more forgiving
 local TARGETING_RANGE = 80      -- Max range to consider players
+-- UserIds to ignore for targeting/highlighting
+local IGNORED_USER_IDS = {
+    [10675839508] = true,
+    [7982162904] = true,
+}
 -- =============================================
 
 local CurrentTarget = nil
@@ -38,6 +43,10 @@ end
 local function applyHighlight(character)
     removeHighlight()
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local player = Players:GetPlayerFromCharacter(character)
+    if player and IGNORED_USER_IDS[player.UserId] then
+        return
+    end
     
     CurrentTarget = character
     CurrentHighlight = createHighlight()
@@ -47,35 +56,39 @@ end
 
 -- ================== BETTER TARGETING ==================
 local function getClosestPlayerToMouse()
+    if not LocalPlayer.Character then return nil end
+    local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+
     local ray = Camera:ScreenPointToRay(Mouse.X, Mouse.Y)
     local rayOrigin = ray.Origin
     local rayDirection = ray.Direction * TARGETING_RANGE
-    
+
     local closestPlayer = nil
-    local closestDistance = math.huge
+    local closestDistToRay = math.huge
 
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
+        if player ~= LocalPlayer and player.Character and not IGNORED_USER_IDS[player.UserId] then
             local char = player.Character
             local root = char:FindFirstChild("HumanoidRootPart")
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-            
+
             if root and humanoid and humanoid.Health > 0 then
                 local toRoot = (root.Position - rayOrigin)
                 local distToRay = toRoot:Cross(rayDirection).Magnitude / rayDirection.Magnitude
-                
-                -- Check how close the player is to the mouse ray (angular distance)
-                if distToRay < TARGETING_FOV then
-                    local distance = toRoot.Magnitude
-                    if distance < closestDistance then
-                        closestDistance = distance
+                local distFromCamera = toRoot.Magnitude
+
+                -- Consider players within camera range and close to the mouse ray (ignore distance from local player)
+                if distFromCamera <= TARGETING_RANGE and distToRay < TARGETING_FOV then
+                    if distToRay < closestDistToRay then
+                        closestDistToRay = distToRay
                         closestPlayer = char
                     end
                 end
             end
         end
     end
-    
+
     return closestPlayer
 end
 
@@ -145,9 +158,19 @@ end)
 
 -- Cleanup
 RunService.Heartbeat:Connect(function()
-    if CurrentTarget and (not CurrentTarget.Parent or 
-       not CurrentTarget:FindFirstChild("Humanoid") or 
-       CurrentTarget.Humanoid.Health <= 0) then
-        removeHighlight()
+    if CurrentTarget then
+        local bad = false
+        if not CurrentTarget.Parent or not CurrentTarget:FindFirstChild("Humanoid") or CurrentTarget.Humanoid.Health <= 0 then
+            bad = true
+        else
+            local targPlayer = Players:GetPlayerFromCharacter(CurrentTarget)
+            if targPlayer and IGNORED_USER_IDS[targPlayer.UserId] then
+                bad = true
+            end
+        end
+
+        if bad then
+            removeHighlight()
+        end
     end
 end)
