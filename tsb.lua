@@ -7,7 +7,7 @@ local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 
 -- ================== SETTINGS ==================
-local MAX_DISTANCE = 50
+local MAX_DISTANCE = 35
 local BEHIND_DISTANCE = 3
 local SPAM_DURATION = 0.185
 -- TARGETING_FOV and TARGETING_RANGE removed — selection is screen-space closest to mouse
