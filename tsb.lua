@@ -56,33 +56,26 @@ end
 
 -- ================== BETTER TARGETING ==================
 local function getClosestPlayerToMouse()
-    if not LocalPlayer.Character then return nil end
-    local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return nil end
-
-    local ray = Camera:ScreenPointToRay(Mouse.X, Mouse.Y)
-    local rayOrigin = ray.Origin
-    local rayDirection = ray.Direction * TARGETING_RANGE
-
     local closestPlayer = nil
-    local closestDistToRay = math.huge
+    local closestScreenDistSq = math.huge
 
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and not IGNORED_USER_IDS[player.UserId] then
+        if player ~= LocalPlayer and not IGNORED_USER_IDS[player.UserId] and player.Character then
             local char = player.Character
-            local root = char:FindFirstChild("HumanoidRootPart")
             local humanoid = char:FindFirstChildOfClass("Humanoid")
-
-            if root and humanoid and humanoid.Health > 0 then
-                local toRoot = (root.Position - rayOrigin)
-                local distToRay = toRoot:Cross(rayDirection).Magnitude / rayDirection.Magnitude
-                local distFromCamera = toRoot.Magnitude
-
-                -- Consider players within camera range and close to the mouse ray (ignore distance from local player)
-                if distFromCamera <= TARGETING_RANGE and distToRay < TARGETING_FOV then
-                    if distToRay < closestDistToRay then
-                        closestDistToRay = distToRay
-                        closestPlayer = char
+            if humanoid and humanoid.Health > 0 then
+                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+                if root then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                    -- WorldToViewportPoint returns a Vector3 where z>0 means in front of camera
+                    if screenPos.Z > 0 then
+                        local dx = Mouse.X - screenPos.X
+                        local dy = Mouse.Y - screenPos.Y
+                        local distSq = dx*dx + dy*dy
+                        if distSq < closestScreenDistSq then
+                            closestScreenDistSq = distSq
+                            closestPlayer = char
+                        end
                     end
                 end
             end
