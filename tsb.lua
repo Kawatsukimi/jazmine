@@ -10,8 +10,8 @@ local Camera = workspace.CurrentCamera
 local MAX_DISTANCE = 50
 local BEHIND_DISTANCE = 3
 local SPAM_DURATION = 0.185
-local TARGETING_FOV = 100       -- Lower = stricter, Higher = more forgiving
-local TARGETING_RANGE = 80      -- Max range to consider players
+-- TARGETING_FOV and TARGETING_RANGE removed — selection is screen-space closest to mouse
+local SCREEN_RADIUS_PIXELS = 120 -- maximum screen-space radius (in pixels) from mouse to consider
 -- UserIds to ignore for targeting/highlighting
 local IGNORED_USER_IDS = {
     [10675839508] = true,
@@ -72,7 +72,8 @@ local function getClosestPlayerToMouse()
                         local dx = Mouse.X - screenPos.X
                         local dy = Mouse.Y - screenPos.Y
                         local distSq = dx*dx + dy*dy
-                        if distSq < closestScreenDistSq then
+                        local radiusSq = SCREEN_RADIUS_PIXELS * SCREEN_RADIUS_PIXELS
+                        if distSq <= radiusSq and distSq < closestScreenDistSq then
                             closestScreenDistSq = distSq
                             closestPlayer = char
                         end
