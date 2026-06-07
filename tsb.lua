@@ -145,7 +145,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             removeHighlight()
         end
         
-    elseif input.KeyCode == Enum.KeyCode.Z then
+    elseif input.KeyCode == Enum.KeyCode.Q then
         teleportBehind()
     end
 end)
